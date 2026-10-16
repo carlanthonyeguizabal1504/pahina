@@ -257,7 +257,7 @@ function renderDashboard() {
   const favourites = saved.favourites.map(id => anime.find(item => item.id === id)).filter(Boolean);
   const recentlyRead = Object.entries(saved.reading).map(([id, detail]) => ({ item: anime.find(entry => entry.id === Number(id)), detail })).filter(entry => entry.item).sort((a, b) => new Date(b.detail.lastReadAt) - new Date(a.detail.lastReadAt));
   const name = escapeHtml(state.user.user_metadata?.display_name || state.user.email?.split("@")[0] || "Reader");
-  area.innerHTML = `<section class="dashboard-head"><div><p class="eyebrow">Account dashboard</p><h1>Hello, ${name}.</h1><p>Your shelf updates as you save and read.</p></div><button class="button-outline" type="button" data-sign-out>Sign out</button></section><section class="dashboard-grid"><div><section class="dashboard-section"><h2>Continue reading</h2><div class="dashboard-cards">${recentlyRead.length ? recentlyRead.map(({ item, detail }) => dashboardCard(item, detail)).join("") : `<p class="empty-library">Your latest reading activity will appear here. Spy × Family is ready when you are.</p>`}</div></section><section class="dashboard-section"><h2>Favourite stories</h2><div class="dashboard-cards">${favourites.length ? favourites.map(item => dashboardCard(item)).join("") : `<p class="empty-library">Save a title from its story page to keep it on your desk.</p>`}</div></section></div><aside class="feedback-panel"><p class="eyebrow">Share a note</p><h3>Send feedback</h3><p>Your feedback opens in Gmail, addressed to the Pahina creator. Review it there, then send.</p><form class="feedback-form" data-feedback-form><label class="auth-field">Your feedback<textarea name="message" required placeholder="Write your feedback here"></textarea></label><button class="button-dark" type="submit">Open Gmail draft</button></form></aside></section>`;
+  area.innerHTML = `<section class="dashboard-head"><div><p class="eyebrow">Account dashboard</p><h1>Hello, ${name}.</h1><p>Your shelf updates as you save and read.</p></div><button class="button-outline" type="button" data-sign-out>Sign out</button></section><section class="dashboard-grid"><div><section class="dashboard-section"><h2>Continue reading</h2><div class="dashboard-cards">${recentlyRead.length ? recentlyRead.map(({ item, detail }) => dashboardCard(item, detail)).join("") : `<p class="empty-library">Your latest reading activity will appear here. Spy × Family is ready when you are.</p>`}</div></section><section class="dashboard-section"><h2>Favourite stories</h2><div class="dashboard-cards">${favourites.length ? favourites.map(item => dashboardCard(item)).join("") : `<p class="empty-library">Save a title from its story page to keep it on your desk.</p>`}</div></section></div><aside class="feedback-panel"><p class="eyebrow">Share a note</p><h3>Send feedback</h3><p>Your message is sent directly to the Pahina creator without leaving this page.</p><form class="feedback-form" data-feedback-form><label class="auth-field">Your feedback<textarea name="message" required placeholder="Write your feedback here"></textarea></label><button class="button-dark" type="submit">Send feedback</button><p class="auth-status" data-feedback-status aria-live="polite"></p></form></aside></section>`;
 }
 
 function renderCreators() {
@@ -355,13 +355,48 @@ async function toggleFavourite(id, button) {
   }
 }
 
-function handleFeedback(form) {
+async function handleFeedback(form) {
   const message = new FormData(form).get("message")?.trim();
   if (!message || !state.user) return;
-  const subject = encodeURIComponent("Pahina feedback");
-  const body = encodeURIComponent(`From: ${state.user.email}\n\n${message}`);
-  window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(FEEDBACK_EMAIL)}&su=${subject}&body=${body}`, "_blank", "noopener");
-  form.reset();
+  const button = form.querySelector("button[type='submit']");
+  const status = form.querySelector("[data-feedback-status]");
+  const originalLabel = button?.textContent;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Sending…";
+  }
+  if (status) {
+    status.textContent = "";
+    status.classList.remove("success");
+  }
+  try {
+    const response = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(FEEDBACK_EMAIL)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        name: state.user.user_metadata?.display_name || "Pahina reader",
+        email: state.user.email || "",
+        message,
+        _subject: "New Pahina feedback",
+        _template: "table",
+        _replyto: state.user.email || ""
+      })
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || result?.success === false || result?.success === "false") throw new Error("Feedback could not be sent.");
+    form.reset();
+    if (status) {
+      status.textContent = "Feedback sent. Thank you for helping improve Pahina.";
+      status.classList.add("success");
+    }
+  } catch (error) {
+    if (status) status.textContent = "We could not send your feedback. Please try again.";
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalLabel;
+    }
+  }
 }
 
 function bindEvents() {
@@ -431,7 +466,7 @@ function bindEvents() {
     const feedback = event.target.closest("[data-feedback-form]");
     if (feedback) {
       event.preventDefault();
-      handleFeedback(feedback);
+      await handleFeedback(feedback);
     }
   });
 }
