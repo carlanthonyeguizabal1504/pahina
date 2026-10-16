@@ -119,7 +119,7 @@ function renderChrome() {
   if (footer) {
     footer.innerHTML = `
       <div class="footer-inner">
-        <p class="footer-meta">Pahina. / A student reading shelf</p>
+        <p class="footer-meta">Pahina. / Owned by John Wane Rivas · Published 2026</p>
         <div class="footer-links">
           <a href="privacy.html">Privacy</a>
           <div class="footer-social" aria-label="Social links">
